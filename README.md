@@ -23,9 +23,6 @@ An interactive data visualization dashboard built with Streamlit for exploring a
 - Python 3.7 or higher
 - pip package manager
 
-## 🚀 Installation
+## 🚀 Streamlit
 
-1. Clone this repository:
-```bash
-git clone https://github.com/yourusername/boston-housing-dashboard.git
-cd boston-housing-dashboard
+https://tugas-st-california.streamlit.app/
