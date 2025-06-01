@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from sklearn.datasets import load_boston
+from sklearn.datasets import fetch_california_housing
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 # Page configuration
 st.set_page_config(
-    page_title="Boston Housing Dashboard",
+    page_title="California Housing Dashboard",
     page_icon="🏠",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -33,20 +33,23 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Load Boston Housing Dataset
+# Load California Housing Dataset
 @st.cache_data
 def load_data():
-    boston = load_boston()
-    df = pd.DataFrame(boston.data, columns=boston.feature_names)
-    df['PRICE'] = boston.target
-    return df, boston
+    housing = fetch_california_housing()
+    df = pd.DataFrame(housing.data, columns=housing.feature_names)
+    df['PRICE'] = housing.target
+    # Add meaningful names
+    df.columns = ['MedInc', 'HouseAge', 'AveRooms', 'AveBedrms', 
+                  'Population', 'AveOccup', 'Latitude', 'Longitude', 'PRICE']
+    return df, housing
 
 # Load data
-df, boston = load_data()
+df, housing = load_data()
 
 # Title
-st.title("🏠 Boston Housing Price Analysis Dashboard")
-st.markdown("Interactive visualization and analysis of Boston Housing dataset")
+st.title("🏠 California Housing Price Analysis Dashboard")
+st.markdown("Interactive visualization and analysis of California Housing dataset")
 st.markdown("---")
 
 # Sidebar
@@ -57,36 +60,36 @@ with st.sidebar:
     feature_x = st.selectbox(
         "Select X-axis feature",
         options=list(df.columns),
-        index=5  # Default to RM
+        index=0  # Default to MedInc
     )
     
     # Component 2: Selectbox for Y-axis
     feature_y = st.selectbox(
         "Select Y-axis feature",
         options=list(df.columns),
-        index=13  # Default to PRICE
+        index=8  # Default to PRICE
     )
     
     # Component 3: Multiselect for features to display
     selected_features = st.multiselect(
         "Select features for correlation analysis",
         options=list(df.columns),
-        default=['RM', 'LSTAT', 'PTRATIO', 'PRICE']
+        default=['MedInc', 'HouseAge', 'AveRooms', 'PRICE']
     )
     
     # Component 4: Slider for sample size
     sample_size = st.slider(
         "Sample size for visualization",
         min_value=50,
-        max_value=len(df),
-        value=min(200, len(df)),
+        max_value=min(5000, len(df)),
+        value=min(1000, len(df)),
         step=50
     )
     
     # Component 5: Radio button for plot type
     plot_type = st.radio(
         "Select visualization type",
-        ["Scatter Plot", "3D Scatter", "Box Plot", "Distribution"]
+        ["Scatter Plot", "3D Scatter", "Box Plot", "Distribution", "Hexbin Plot"]
     )
     
     # Component 6: Checkbox for regression line
@@ -113,7 +116,9 @@ df_sample = df.sample(n=sample_size, random_state=42)
 if standardize:
     scaler = StandardScaler()
     numeric_cols = df_sample.select_dtypes(include=[np.number]).columns
-    df_sample[numeric_cols] = scaler.fit_transform(df_sample[numeric_cols])
+    df_standardized = df_sample.copy()
+    df_standardized[numeric_cols] = scaler.fit_transform(df_sample[numeric_cols])
+    df_sample = df_standardized
 
 # Main content area
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Visualization", "📈 Statistical Analysis", "🤖 Model Prediction", "📋 Data Overview"])
@@ -132,7 +137,6 @@ with tab1:
             
             if show_regression and feature_x != feature_y:
                 # Add regression line
-                from sklearn.linear_model import LinearRegression
                 lr = LinearRegression()
                 X = df_sample[feature_x].values.reshape(-1, 1)
                 y = df_sample[feature_y].values
@@ -153,7 +157,7 @@ with tab1:
                 feature_z = st.selectbox(
                     "Select Z-axis feature",
                     options=list(df.columns),
-                    index=0
+                    index=2
                 )
             
             fig = px.scatter_3d(df_sample, x=feature_x, y=feature_y, z=feature_z,
@@ -167,13 +171,18 @@ with tab1:
                         title=f"Distribution of {feature_y}",
                         color_discrete_sequence=[plot_color])
             
-        else:  # Distribution
+        elif plot_type == "Distribution":
             fig = px.histogram(df_sample, x=feature_y, nbins=n_bins,
                              title=f"Distribution of {feature_y}",
                              color_discrete_sequence=[plot_color])
             fig.add_vline(x=df_sample[feature_y].mean(), 
                          line_dash="dash", 
                          annotation_text="Mean")
+        
+        else:  # Hexbin Plot
+            fig = px.density_heatmap(df_sample, x=feature_x, y=feature_y,
+                                   title=f"Density Heatmap: {feature_x} vs {feature_y}",
+                                   nbinsx=30, nbinsy=30)
         
         st.plotly_chart(fig, use_container_width=True)
     
@@ -196,30 +205,32 @@ with tab2:
         fig_corr = px.imshow(corr_matrix, 
                             text_auto=True,
                             color_continuous_scale='RdBu',
-                            title="Correlation Heatmap")
+                            title="Correlation Heatmap",
+                            aspect="auto")
         st.plotly_chart(fig_corr, use_container_width=True)
         
         # Feature importance
         st.subheader("Feature Importance for Price Prediction")
         if 'PRICE' in selected_features:
-            from sklearn.ensemble import RandomForestRegressor
-            
             rf = RandomForestRegressor(n_estimators=100, random_state=42)
-            X = df[selected_features].drop('PRICE', axis=1)
-            y = df['PRICE']
-            rf.fit(X, y)
+            feature_cols = [col for col in selected_features if col != 'PRICE']
             
-            importance_df = pd.DataFrame({
-                'Feature': X.columns,
-                'Importance': rf.feature_importances_
-            }).sort_values('Importance', ascending=False)
-            
-            fig_imp = px.bar(importance_df, x='Importance', y='Feature', 
-                           orientation='h',
-                           title="Feature Importance",
-                           color='Importance',
-                           color_continuous_scale=[[0, 'white'], [1, plot_color]])
-            st.plotly_chart(fig_imp, use_container_width=True)
+            if len(feature_cols) > 0:
+                X = df[feature_cols]
+                y = df['PRICE']
+                rf.fit(X, y)
+                
+                importance_df = pd.DataFrame({
+                    'Feature': X.columns,
+                    'Importance': rf.feature_importances_
+                }).sort_values('Importance', ascending=False)
+                
+                fig_imp = px.bar(importance_df, x='Importance', y='Feature', 
+                               orientation='h',
+                               title="Feature Importance",
+                               color='Importance',
+                               color_continuous_scale=[[0, 'white'], [1, plot_color]])
+                st.plotly_chart(fig_imp, use_container_width=True)
 
 with tab3:
     st.subheader("🤖 Price Prediction Model")
@@ -230,18 +241,22 @@ with tab3:
         st.write("### Input Features")
         # Create input fields for prediction
         input_data = {}
-        for feature in ['RM', 'LSTAT', 'PTRATIO', 'DIS', 'NOX']:
-            input_data[feature] = st.number_input(
-                f"{feature}",
-                value=float(df[feature].mean()),
-                step=0.1
-            )
+        feature_names = ['MedInc', 'HouseAge', 'AveRooms', 'AveBedrms', 'Population']
+        
+        for feature in feature_names:
+            if feature in df.columns:
+                input_data[feature] = st.number_input(
+                    f"{feature}",
+                    value=float(df[feature].mean()),
+                    step=0.1,
+                    format="%.2f"
+                )
     
     with col2:
         st.write("### Prediction Results")
         
         # Train simple model
-        X = df[['RM', 'LSTAT', 'PTRATIO', 'DIS', 'NOX']]
+        X = df[feature_names]
         y = df['PRICE']
         
         model = LinearRegression()
@@ -251,7 +266,8 @@ with tab3:
         input_df = pd.DataFrame([input_data])
         prediction = model.predict(input_df)[0]
         
-        st.metric("Predicted Price", f"${prediction*1000:.2f}")
+        st.metric("Predicted Price", f"${prediction*100000:.2f}")
+        st.caption("*Price in hundreds of thousands of dollars")
         
         # Model accuracy
         from sklearn.metrics import r2_score
@@ -275,11 +291,23 @@ with tab4:
         st.write("### Dataset Information")
         st.write(f"- **Number of samples**: {len(df)}")
         st.write(f"- **Number of features**: {len(df.columns)-1}")
-        st.write("- **Target variable**: PRICE (Median value of owner-occupied homes in $1000's)")
+        st.write("- **Target variable**: PRICE (Median house value in hundreds of thousands of dollars)")
+        
+        with st.expander("Feature Descriptions"):
+            st.write("""
+            - **MedInc**: Median income in block group
+            - **HouseAge**: Median house age in block group
+            - **AveRooms**: Average number of rooms per household
+            - **AveBedrms**: Average number of bedrooms per household
+            - **Population**: Block group population
+            - **AveOccup**: Average number of household members
+            - **Latitude**: Block group latitude
+            - **Longitude**: Block group longitude
+            """)
     
     if show_raw:
-        st.write("### Raw Data")
-        st.dataframe(df_sample, use_container_width=True)
+        st.write("### Raw Data Sample")
+        st.dataframe(df_sample.head(100), use_container_width=True)
     
     if show_summary:
         st.write("### Summary Statistics")
@@ -287,4 +315,4 @@ with tab4:
 
 # Footer
 st.markdown("---")
-st.markdown("Built with ❤️ using Streamlit | Boston Housing Dataset")
+st.markdown("Built with ❤️ using Streamlit | California Housing Dataset")
