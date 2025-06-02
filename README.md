@@ -1,6 +1,6 @@
-# 🏠 Boston Housing Price Visualization Dashboard
+# 🏠 California Housing Price Visualization Dashboard
 
-An interactive data visualization dashboard built with Streamlit for exploring and analyzing the Boston Housing dataset.
+An interactive data visualization dashboard built with Streamlit for exploring and analyzing the California Housing dataset.
 
 ## 🌟 Features
 
